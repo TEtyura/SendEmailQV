@@ -1,0 +1,102 @@
+Sub SendResultsByEmailWithFiltering()
+
+    ' Получаем переменную с адресами получателей (разделены запятыми)
+    Dim emailList, emailArray, recipient
+    emailList = ActiveDocument.Variables("emailList").GetContent.String
+    'emailList = "svetlakov.yurii@mail.ru, yuri.s@businessqlik.com"
+    emailArray = Split(emailList, ",")
+    
+    ' Цикл по всем адресам электронной почты
+    For Each recipient In emailArray
+        
+        ' Устанавливаем фильтр на основе текущего адреса электронной почты
+        ActiveDocument.Fields("email").Select recipient ' Здесь "EmailField" — это имя поля в QlikView, содержащего адреса
+
+        ' Экспортируем отфильтрованную таблицу из QlikView в Excel
+        Dim ExcelApp, Workbook, Worksheet, rng, table
+        Set ExcelApp = CreateObject("Excel.Application")
+        ExcelApp.Visible = False
+        Set Workbook = ExcelApp.Workbooks.Add
+        Set Worksheet = Workbook.Sheets(1)
+        
+        ' Экспорт данных таблицы, которая отфильтрована для текущего получателя
+        Set table = ActiveDocument.GetSheetObject("CH01") ' Имя объекта таблицы в QlikView
+        table.CopyTableToClipboard True
+        Worksheet.Paste Worksheet.Cells(1, 1)
+
+        ' Получение данных из Excel для HTML
+        Set rng = Worksheet.UsedRange
+        
+        ' Генерация HTML контента из данных Excel
+        Dim HTMLContent, i, j, cellValue
+        HTMLContent = "<html><head><meta http-equiv='Content-Type' content='text/html'></head><body>"
+        HTMLContent = HTMLContent & "<h2>Ваши результаты работы</h2><table border='1' cellpadding='5' cellspacing='0'>"
+
+        ' Перебор строк и столбцов Excel для создания HTML таблицы
+        For i = 1 To rng.Rows.Count
+            HTMLContent = HTMLContent & "<tr>"
+            For j = 1 To rng.Columns.Count
+                cellValue = Worksheet.Cells(i, j).Value
+                If IsEmpty(cellValue) Then
+                    cellValue = ""
+                End If
+                ' Замена символа № на HTML сущность
+                cellValue = Replace(cellValue, "№", "&#8470;")
+                HTMLContent = HTMLContent & "<td>" & cellValue & "</td>"
+            Next
+            HTMLContent = HTMLContent & "</tr>"
+        Next
+
+        HTMLContent = HTMLContent & "</table></body></html>"
+
+        ' Закрываем Excel без сохранения
+        Workbook.Close False
+        ExcelApp.Quit
+
+        ' Настройка CDO для отправки почты через SMTP Mail.ru
+        Dim iMsg, iConf, Flds
+        Set iMsg = CreateObject("CDO.Message")
+        Set iConf = CreateObject("CDO.Configuration")
+        Set Flds = iConf.Fields
+
+        ' Конфигурация SMTP-сервера Mail.ru
+        With Flds
+            .Item("http://schemas.microsoft.com/cdo/configuration/sendusing") = 2
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpserver") = "smtp.mail.ru"
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpserverport") = 465
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpauthenticate") = 1
+            .Item("http://schemas.microsoft.com/cdo/configuration/sendusername") = "svetlakov.yurii@mail.ru"
+            .Item("http://schemas.microsoft.com/cdo/configuration/sendpassword") = "7RM1NssmEhSpfL6cgDzg"
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpusessl") = True
+            .Update
+        End With
+
+        ' Настройка почтового сообщения
+        With iMsg
+            Set .Configuration = iConf
+            .To = Trim(recipient) ' Адрес получателя
+            .From = "svetlakov.yurii@mail.ru" ' Адрес отправителя
+            .Subject = "Ваши результаты работы"
+            .HTMLBody = HTMLContent ' Вставляем сгенерированный HTML
+
+            ' Установка кодировки для UTF-8
+            .Fields("urn:schemas:mailheader:content-type") = "text/html; charset=UTF-8"
+            .Send
+        End With
+
+        ' Очистка объектов перед следующей итерацией
+        Set iMsg = Nothing
+        Set iConf = Nothing
+        Set Flds = Nothing
+        Set rng = Nothing
+        Set Worksheet = Nothing
+        Set Workbook = Nothing
+        Set ExcelApp = Nothing
+
+        ' Сброс фильтра
+        ActiveDocument.ClearAll True
+    Next
+
+    MsgBox "Письма с таблицей успешно отправлены через SMTP Mail.ru!", vbInformation
+
+End Sub
