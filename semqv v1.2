@@ -1,0 +1,171 @@
+Sub SendResultsByEmailWithFiltering()
+
+   ' Получаем переменную с адресами получателей (разделены запятыми)
+    Dim emailList, emailArray, recipient
+   ' emailList = ActiveDocument.Variables("emailList").GetContent.String
+    emailList = "svetlakov.yurii@mail.ru"
+    emailArray = Split(emailList, ",")
+    
+    ' Цикл по всем адресам электронной почты
+    For Each recipient In emailArray
+        
+        ' Устанавливаем фильтр на основе текущего адреса электронной почты
+        ActiveDocument.Fields("email").Select recipient ' Здесь "EmailField" — это имя поля в QlikView, содержащего адреса
+
+        ' Экспортируем таблицы из QlikView в Excel
+        Dim ExcelApp, Workbook, Worksheet, table1, table2, table3, table4, table5, rowOffset, tableRowCount
+        Set ExcelApp = CreateObject("Excel.Application")
+        ExcelApp.Visible = False  ' Оставляем Excel невидимым
+        Set Workbook = ExcelApp.Workbooks.Add
+        Set Worksheet = Workbook.Sheets(1)
+
+        ' Получаем объекты таблиц из QlikView
+        Set table1 = ActiveDocument.GetSheetObject("CH01")
+        Set table2 = ActiveDocument.GetSheetObject("CH02")
+        Set table3 = ActiveDocument.GetSheetObject("CH03")
+        Set table4 = ActiveDocument.GetSheetObject("CH04")
+        Set table5 = ActiveDocument.GetSheetObject("CH05")
+
+        ' Экспорт первой таблицы в Excel
+        table1.CopyTableToClipboard True
+        Worksheet.Paste Worksheet.Cells(2, 1)
+        tableRowCount = table1.GetRowCount
+
+        ' Экспорт остальных таблиц
+        rowOffset = tableRowCount + 2
+        table2.CopyTableToClipboard True
+        Worksheet.Paste Worksheet.Cells(rowOffset, 4)
+
+
+        rowOffset = rowOffset + table2.GetRowCount + 1
+        table3.CopyTableToClipboard True
+        Worksheet.Paste Worksheet.Cells(rowOffset, 1)
+
+
+        rowOffset = rowOffset + table3.GetRowCount
+        table4.CopyTableToClipboard True
+        Worksheet.Paste Worksheet.Cells(rowOffset, 3)
+
+
+        table5.CopyTableToClipboard True
+        Worksheet.Paste Worksheet.Cells(10, 5)
+
+        Const xlCenter = -4108
+     
+        ' Форматирование таблицы
+        With Worksheet
+            .Range("A1").Value = "Основная мотивация"
+            .Range("A1").Font.Bold = True
+            .Range("A1").Font.Color = RGB(255, 255, 255)
+            .Range("A1").HorizontalAlignment = xlCenter
+            .Range("A1").Interior.Color = RGB(47, 117, 181)
+            .Range("A1:F1").Merge
+
+            .Range("D9").Font.Bold = True
+            .Range("C8:D9").Merge
+            .Range("A8:B9").Merge
+            .Range("E8:E9").Merge
+            .Range("F8:F9").Merge
+
+            .Range("A10").Value = "Дополнительная мотивация"
+            .Range("A10").Font.Bold = True
+            .Range("A10").Font.Color = RGB(255, 255, 255)
+            .Range("A10").HorizontalAlignment = xlCenter
+            .Range("A10").Interior.Color = RGB(47, 117, 181)
+            .Range("A10:D10").Merge
+
+            .Range("C14").Font.Bold = True
+            .Range("A13:B14").Merge
+            .Range("C13:C14").Merge
+            .Range("D13:D14").Merge
+
+            .Range("E10").Interior.Color = RGB(47, 117, 181)
+            .Range("E10").Font.Bold = True
+            .Range("E10").Font.Color = RGB(255, 255, 255)
+            .Range("E10").Font.Size = 11
+            .Range("E10").HorizontalAlignment = xlCenter
+            .Range("E10:F10").Merge
+            .Range("E11:F14").Merge
+
+            .Range("A1:F14").Borders.LineStyle = True
+            .Range("A1:F14").Columns.AutoFit
+        End With
+
+        ' Получение данных из Excel для HTML
+        Set rng = Worksheet.UsedRange
+        
+        ' Генерация HTML контента из данных Excel
+        Dim HTMLContent, i, j, cellValue
+        HTMLContent = "<html><head><meta http-equiv='Content-Type' content='text/html'></head><body>"
+        HTMLContent = HTMLContent & "<h2>Ваши результаты работы</h2><table border='1' cellpadding='5' cellspacing='0'>"
+
+        ' Перебор строк и столбцов Excel для создания HTML таблицы
+        For i = 1 To rng.Rows.Count
+            HTMLContent = HTMLContent & "<tr>"
+            For j = 1 To rng.Columns.Count
+                cellValue = Worksheet.Cells(i, j).Value
+                If IsEmpty(cellValue) Then
+                    cellValue = ""
+                End If
+                ' Замена символа № на HTML сущность
+                cellValue = Replace(cellValue, "№", "&#8470;")
+                HTMLContent = HTMLContent & "<td>" & cellValue & "</td>"
+            Next
+            HTMLContent = HTMLContent & "</tr>"
+        Next
+
+        HTMLContent = HTMLContent & "</table></body></html>"
+
+        ' Закрываем Excel без сохранения
+        Workbook.Close False
+        ExcelApp.Quit
+
+        ' Настройка CDO для отправки почты через SMTP Mail.ru
+        Dim iMsg, iConf, Flds
+        Set iMsg = CreateObject("CDO.Message")
+        Set iConf = CreateObject("CDO.Configuration")
+        Set Flds = iConf.Fields
+
+        ' Конфигурация SMTP-сервера Mail.ru
+        With Flds
+            .Item("http://schemas.microsoft.com/cdo/configuration/sendusing") = 2
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpserver") = "smtp.mail.ru"
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpserverport") = 465
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpauthenticate") = 1
+            .Item("http://schemas.microsoft.com/cdo/configuration/sendusername") = "svetlakov.yurii@mail.ru"
+            .Item("http://schemas.microsoft.com/cdo/configuration/sendpassword") = "7RM1NssmEhSpfL6cgDzg"
+            .Item("http://schemas.microsoft.com/cdo/configuration/smtpusessl") = True
+            .Update
+        End With
+
+        ' Настройка почтового сообщения
+        With iMsg
+            Set .Configuration = iConf
+            .To = "svetlakov.yurii@mail.ru" ' Адрес получателя
+            .From = "svetlakov.yurii@mail.ru" ' Адрес отправителя
+            .Subject = "Ваши результаты работы"
+            .HTMLBody = HTMLContent ' Вставляем сгенерированный HTML
+
+            ' Установка кодировки для UTF-8
+            .Fields("urn:schemas:mailheader:content-type") = "text/html; charset=UTF-8"
+            .Send
+        End With
+
+        ' Очистка объектов перед следующей итерацией
+        Set iMsg = Nothing
+        Set iConf = Nothing
+        Set Flds = Nothing
+        Set rng = Nothing
+        Set Worksheet = Nothing
+        Set Workbook = Nothing
+        Set ExcelApp = Nothing
+  
+        ActiveDocument.ClearAll True
+    Next
+
+
+
+    MsgBox "Письма с таблицей успешно отправлены через SMTP Mail.ru!", vbInformation
+
+End Sub
+   
