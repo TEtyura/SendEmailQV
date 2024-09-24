@@ -1,0 +1,139 @@
+Sub CreateHTMLFromTables()
+    ' Получаем переменную с адресами получателей (разделены запятыми)
+    Dim emailList, emailArray, recipient
+    emailList = ActiveDocument.Variables("emailList").GetContent.String
+    emailArray = Split(emailList, ",")
+
+    ' Проверка на наличие хотя бы одного адреса
+    If UBound(emailArray) < 0 Then
+        MsgBox "Список адресов электронной почты пустой!", vbExclamation
+        Exit Sub
+    End If
+
+    ' Настройка CDO для отправки почты через SMTP Mail.ru
+    Dim iMsg, iConf, Flds
+    Set iMsg = CreateObject("CDO.Message")
+    Set iConf = CreateObject("CDO.Configuration")
+    Set Flds = iConf.Fields
+
+    ' Конфигурация SMTP-сервера Mail.ru
+    With Flds
+        .Item("http://schemas.microsoft.com/cdo/configuration/sendusing") = 2
+        .Item("http://schemas.microsoft.com/cdo/configuration/smtpserver") = "smtp.mail.ru"
+        .Item("http://schemas.microsoft.com/cdo/configuration/smtpserverport") = 465
+        .Item("http://schemas.microsoft.com/cdo/configuration/smtpauthenticate") = 1
+        .Item("http://schemas.microsoft.com/cdo/configuration/sendusername") = "svetlakov.yurii@mail.ru"
+        .Item("http://schemas.microsoft.com/cdo/configuration/sendpassword") = "7RM1NssmEhSpfL6cgDzg"
+        .Item("http://schemas.microsoft.com/cdo/configuration/smtpusessl") = True
+        .Update
+    End With
+
+    ' Инициализация переменных для работы с таблицами и HTML-кодом
+    Dim table1, table2, table3, table4, table5
+    Dim HTMLContent
+
+    ' Получаем объекты таблиц
+    Set table1 = ActiveDocument.GetSheetObject("CH01")
+    Set table2 = ActiveDocument.GetSheetObject("CH02")
+    Set table3 = ActiveDocument.GetSheetObject("CH03")
+    Set table4 = ActiveDocument.GetSheetObject("CH04")
+    Set table5 = ActiveDocument.GetSheetObject("CH05")
+
+    ' Инициализация начального HTML-кода
+    HTMLContent = "<html><head><meta http-equiv='Content-Type' content='text/html;'></head><body>"
+    HTMLContent = HTMLContent & "<h2>Объединенные данные из таблиц</h2>"
+
+    ' Добавляем первую таблицу с заголовком
+    HTMLContent = HTMLContent & "<h3 style='background-color: #2F75B5; color: white; padding: 10px;'>Основная мотивация</h3>"
+    HTMLContent = HTMLContent & AddTableToHTML(table1)
+
+    ' Добавляем вторую таблицу с заголовком
+    HTMLContent = HTMLContent & AddTableToHTML(table2)
+
+    ' Добавляем вложенную таблицу для размещения таблиц 3 и 4, и таблицы 5
+    HTMLContent = HTMLContent & "<table border='0' width='100%'><tr>"
+
+    ' Ячейка для таблиц 3 и 4 (левая часть, 60%)
+    HTMLContent = HTMLContent & "<td width='60%' valign='top'>"
+    HTMLContent = HTMLContent & "<h3 style='background-color: #2F75B5; color: white; padding: 10px;'>Дополнительная мотивация</h3>"
+    HTMLContent = HTMLContent & AddTableToHTML(table3)
+    HTMLContent = HTMLContent & AddTableToHTML(table4)
+    HTMLContent = HTMLContent & "</td>"
+
+    ' Ячейка для таблицы 5 (правая часть, 40%)
+    HTMLContent = HTMLContent & "<td width='40%' valign='top'>"
+    HTMLContent = HTMLContent & "<h3 style='background-color: #2F75B5; color: white; padding: 10px;'>Общий доход</h3>"
+    HTMLContent = HTMLContent & AddTableToHTML(table5)
+    HTMLContent = HTMLContent & "</td>"
+
+    ' Закрываем строку и таблицу
+    HTMLContent = HTMLContent & "</tr></table>"
+
+    ' Завершаем HTML-код
+    HTMLContent = HTMLContent & "</body></html>"
+
+    ' Генерация сообщения с HTML-кодом (тест)
+    MsgBox HTMLContent
+
+    ' Цикл отправки на каждый email
+    For Each recipient In emailArray
+        ' Настройка почтового сообщения
+        With iMsg
+            Set .Configuration = iConf
+            .To = Trim(recipient) ' Адрес получателя
+            .From = "svetlakov.yurii@mail.ru" ' Адрес отправителя
+            .Subject = "Ваши результаты работы"
+            .HTMLBody = HTMLContent ' Вставляем сгенерированный HTML
+
+            ' Установка кодировки для UTF-8
+            .Fields("urn:schemas:mailheader:content-type") = "text/html; charset=UTF-8"
+            .Send
+        End With
+    Next
+
+    MsgBox "Письма отправлены успешно!", vbInformation
+
+    ' Очистка объектов
+    Set iMsg = Nothing
+    Set iConf = Nothing
+    Set Flds = Nothing
+
+End Sub
+
+' Функция для вставки таблицы в HTML-код с форматированием
+Function AddTableToHTML(sheetObject)
+    Dim tableHTML, row, col, cellData
+    tableHTML = "<table border='1' cellpadding='5' cellspacing='0' width='100%'>" ' Установлены атрибуты для отсутствия отступов между таблицами
+
+    ' Получаем количество строк и колонок в таблице
+    Dim rowCount, colCount
+    rowCount = sheetObject.GetRowCount
+    colCount = sheetObject.GetColumnCount
+
+    ' Добавляем заголовки
+    tableHTML = tableHTML & "<tr>"
+    For col = 0 To colCount - 1
+        cellData = sheetObject.GetCell(0, col).Text
+        tableHTML = tableHTML & "<th>" & cellData & "</th>"
+    Next
+    tableHTML = tableHTML & "</tr>"
+
+    ' Добавляем строки и колонки в HTML-код
+    For row = 1 To rowCount - 1 ' Начинаем с 1, если первая строка - заголовок
+        tableHTML = tableHTML & "<tr>"
+        For col = 0 To colCount - 1
+            cellData = sheetObject.GetCell(row, col).Text
+            ' Проверка на пустую ячейку
+            If IsEmpty(cellData) Then
+                cellData = ""
+            End If
+            ' Замена символа № на HTML сущность
+            cellData = Replace(cellData, "№", "&#8470;")
+            tableHTML = tableHTML & "<td>" & cellData & "</td>"
+        Next
+        tableHTML = tableHTML & "</tr>"
+    Next
+    tableHTML = tableHTML & "</table>" ' Завершаем таблицу, убираем пробелы между таблицами
+
+    AddTableToHTML = tableHTML
+End Function
